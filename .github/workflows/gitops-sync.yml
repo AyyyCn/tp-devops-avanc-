@@ -1,0 +1,58 @@
+name: GitOps Validation
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+    paths:
+      - 'manifests/**'
+      - 'apps/**'
+  pull_request:
+    branches:
+      - main
+      - develop
+    paths:
+      - 'manifests/**'
+      - 'apps/**'
+
+jobs:
+  validate-manifests:
+    name: Validate Kubernetes Manifests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v3
+
+      - name: Validate YAML syntax
+        run: |
+          echo "🔍 Validation de la syntaxe YAML..."
+          find manifests apps -name "*.yaml" -o -name "*.yml" | while read file; do
+            echo "Validating $file"
+            kubectl apply --dry-run=client -f "$file" || exit 1
+          done
+
+      - name: Validate Kustomize
+        run: |
+          echo "🔍 Validation Kustomize..."
+          if [ -f manifests/example-app/kustomization.yaml ]; then
+            kubectl kustomize manifests/example-app/ || exit 1
+          fi
+
+  notify-argocd:
+    name: Notify ArgoCD (optional)
+    runs-on: ubuntu-latest
+    needs: validate-manifests
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Notify ArgoCD
+        run: |
+          echo "📢 ArgoCD sera automatiquement notifié du changement"
+          echo "La synchronisation se fera automatiquement si syncPolicy.automated est activé"
+
